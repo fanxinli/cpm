@@ -10,6 +10,8 @@ import torch.distributed as dist
 import communication
 import runtime_utilities
 
+from fp16 import FP16_Module
+
 IMAGE_CLASSIFICATION = "image_classification"
 TRANSLATION = "translation"
 SPEECH_TO_TEXT = "speech_to_text"
@@ -227,8 +229,7 @@ class StageRuntime:
         for i in range(len(modules)):
             modules[i] = modules[i].cuda()
             if self.fp16:
-                import apex.fp16_utils as fp16_utils
-                modules[i] = fp16_utils.BN_convert_float(modules[i].half())
+                modules[i] = FP16_Module(modules[i])
 
         # Initialize all groups in the same order on every worker.
         if stage_to_rank_map is not None:
@@ -588,10 +589,16 @@ class StageRuntime:
     def run_backward(self):
         if self.is_criterion:
             for module in self.modules_with_dependencies.modules()[:-1]:
-                module.pre_backward()
+                if self.fp16:
+                    module.module.pre_backward()
+                else:
+                    module.pre_backward()
         else:
             for module in self.modules_with_dependencies.modules():
-                module.pre_backward()
+                if self.fp16:
+                    module.module.pre_backward()
+                else:
+                    module.pre_backward()
         # Receive input gradients needed for backward pass.
         self.receive_tensors_backward()
         # Backward pass through modules in reverse order.

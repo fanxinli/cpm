@@ -209,6 +209,8 @@ class CrossEntropyWrapper(nn.Module):
         output = torch.sum(output * mask.unsqueeze(-1), 1) / torch.sum(mask, -1).unsqueeze(-1)
         # get the label of the last token
         labels = labels.float()
+        if mask.dtype == torch.float16:
+            labels = labels.half()
         labels = (torch.sum(labels * mask, 1) / torch.sum(mask, -1)).long()
         # cross_entropy loss
         losses = vocab_parallel_cross_entropy(output.unsqueeze(1).contiguous().float(), labels.unsqueeze(1))
@@ -459,7 +461,10 @@ def train(train_loader, r, optimizer, epoch):
             if not weight_stash:
                 r.run_backward()
             else:
-                optimizer.zero_grad()
+                if args.fp16:
+                    r.zero_grad()
+                else:
+                    optimizer.zero_grad()
                 optimizer.load_old_params()
                 r.run_backward()
                 optimizer.load_new_params()
@@ -471,7 +476,10 @@ def train(train_loader, r, optimizer, epoch):
             if not weight_stash:
                 r.run_backward()
             else:
-                optimizer.zero_grad()
+                if args.fp16:
+                    r.zero_grad()
+                else:
+                    optimizer.zero_grad()
                 optimizer.load_old_params()
                 r.run_backward()
                 optimizer.load_new_params()
@@ -479,7 +487,10 @@ def train(train_loader, r, optimizer, epoch):
 
         if not weight_stash:
             optimizer.base_optimizer.step()
-            optimizer.zero_grad()
+            if args.fp16:
+                r.zero_grad()
+            else:
+                optimizer.zero_grad()
 
     if args.sync_mode == BSP:
         accumulation_steps = 32
