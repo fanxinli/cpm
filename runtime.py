@@ -345,7 +345,7 @@ class StageRuntime:
         if self.comm_handler is not None:
             self.comm_handler.set_tensor_shapes(self.tensor_shapes)
             self.comm_handler.start_helper_threads(
-                num_iterations, forward_only=False)
+                num_iterations, self.num_warmup_minibatches, forward_only=False)
 
         modules = self.modules_with_dependencies.modules()
         for i in range(len(modules)):
