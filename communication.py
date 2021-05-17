@@ -608,7 +608,7 @@ class CommunicationHandler(object):
 def recv_helper_thread(queue, counter, local_rank, tensor_name,
                        src_rank, tag, tensor_shape, dtype,
                        sub_process_group, num_iterations):
-    # torch.cuda.set_device(local_rank)
+    torch.cuda.set_device(local_rank)
     # This method is to be executed from a helper daemon thread.
     for i in range(num_iterations):
         tensor = _recv(
@@ -621,7 +621,7 @@ def recv_helper_thread(queue, counter, local_rank, tensor_name,
 def send_helper_thread(queue, counter, local_rank, tensor_name,
                        src_rank, dst_rank, tag,
                        sub_process_group, num_iterations):
-    # torch.cuda.set_device(local_rank)
+    torch.cuda.set_device(local_rank)
     # This method is to be executed from a helper daemon thread.
     for i in range(num_iterations):
         tensor = queue.remove()
@@ -655,9 +655,9 @@ def _recv(tensor_name, src_rank, tensor_shape=None, dtype=torch.float32,
 
         # Receive tensor.
         if dtype == torch.bool:
-            tensor = torch.zeros(received_tensor_shape, dtype=torch.int8, device=torch.device('cuda'))
+            tensor = torch.zeros(received_tensor_shape, dtype=torch.int8, device=torch.cuda.current_device())
         else:
-            tensor = torch.zeros(received_tensor_shape, dtype=dtype, device=torch.device('cuda'))
+            tensor = torch.zeros(received_tensor_shape, dtype=dtype, device=torch.cuda.current_device())
         dist.broadcast(tensor=tensor,
                        src=src_rank,
                        group=sub_process_group)

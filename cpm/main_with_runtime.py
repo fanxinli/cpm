@@ -221,8 +221,8 @@ def main():
     global args, best_prec1
     args = parser.parse_args()
     args.data = args.data_dir
-    # torch.cuda.set_device(args.local_rank)
-    os.environ["CUDA_VISIBLE_DEVICES"]=f"{args.local_rank}"
+    torch.cuda.set_device(args.local_rank)
+    # os.environ["CUDA_VISIBLE_DEVICES"]=f"{args.local_rank}"
 
     criterion = CrossEntropyWrapper()
 

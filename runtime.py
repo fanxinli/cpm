@@ -587,18 +587,18 @@ class StageRuntime:
             self.loss = 1
 
     def run_backward(self):
-        if self.is_criterion:
-            for module in self.modules_with_dependencies.modules()[:-1]:
-                if self.fp16:
-                    module.module.pre_backward()
-                else:
-                    module.pre_backward()
-        else:
-            for module in self.modules_with_dependencies.modules():
-                if self.fp16:
-                    module.module.pre_backward()
-                else:
-                    module.pre_backward()
+        # if self.is_criterion:
+        #     for module in self.modules_with_dependencies.modules()[:-1]:
+        #         if self.fp16:
+        #             module.module.pre_backward()
+        #         else:
+        #             module.pre_backward()
+        # else:
+        #     for module in self.modules_with_dependencies.modules():
+        #         if self.fp16:
+        #             module.module.pre_backward()
+        #         else:
+        #             module.pre_backward()
         # Receive input gradients needed for backward pass.
         self.receive_tensors_backward()
         # Backward pass through modules in reverse order.
@@ -740,6 +740,7 @@ class StageRuntime:
             return loader_size
 
         num_iterations = loader_size * self.num_ranks_in_first_stage
+        num_iterations -= 1
         assert num_iterations % self.num_ranks_in_stage == 0
         num_iterations = num_iterations // self.num_ranks_in_stage
 
