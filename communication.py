@@ -94,9 +94,13 @@ class CommunicationHandler(object):
         Initialize state needed for CommunicationHandler.
         """
         self.receive_ranks = receive_ranks
+        print("Receive ranks"+str(receive_ranks))
         self.send_ranks = send_ranks
+        print("Send ranks"+str(send_ranks))
         self.tensor_tags = tensor_tags
+        print("Tensor tags"+str(tensor_tags))
         self.target_tensor_names = target_tensor_names
+        print("Target tensor names"+str(target_tensor_names))
         self.training_tensor_dtypes = training_tensor_dtypes
         self.rank_in_stage = rank_in_stage
         self.num_ranks_in_stage = num_ranks_in_stage
@@ -249,6 +253,7 @@ class CommunicationHandler(object):
         """
         Start helper communication threads, one for each queue.
         """
+    
         if forward_only:
             self.set_counter(self.num_forward_threads +
                              self.num_ack_threads)

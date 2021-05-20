@@ -29,6 +29,10 @@ class ModulesWithDependencies:
             self._modules.append(module)
             self._all_input_names.append(input_names)
             self._all_output_names.append(output_names)
+        
+        print("Modules with dependencies:")
+        print(self._all_input_names)
+        print(self._all_output_names)
 
     def modules(self):
         return self._modules
@@ -110,6 +114,9 @@ class StageRuntime:
             tensor_tag += 1
         self.tensor_tags["ack"] = tensor_tag
         tensor_tag += 1
+        ## Add control tensor tag
+        self.tensor_tags["control"] = tensor_tag 
+        tensor_tag += 1
 
         module_to_stage_map = configuration_maps['module_to_stage_map']
         stage_to_rank_map = configuration_maps['stage_to_rank_map']
@@ -167,6 +174,8 @@ class StageRuntime:
             modules = stage_to_module_map[self.stage]
             self.modules_with_dependencies = ModulesWithDependencies(
                 [model[module] for module in modules])
+            # print("Modules with dpendencies:")
+            # print(self.modules_with_dependencies)
             self.is_criterion = self.stage == (self.num_stages - 1)
             if stage_to_depth_map is not None:
                 self.num_warmup_minibatches = stage_to_depth_map[
@@ -196,6 +205,7 @@ class StageRuntime:
 
             for i in range(len(model)-1):
                 for tensor_name in model[i][2]:
+                    print("Tensor_name: "+tensor_name)
                     if tensor_name in model[i+1][1]:
                         if module_to_stage_map[i] == \
                             module_to_stage_map[i+1]:
@@ -281,6 +291,17 @@ class StageRuntime:
             self.master_parameters = list(self.parameters())
             self.model_parameters = None
 
+###
+###  send ranks and receive ranks add control message
+###
+        if self.stage > 0:
+            self.receive_ranks["control"]=stage_to_rank_map[self.stage-1]
+
+        if self.stage < self.num_stages-1:
+            self.send_ranks["control"]=stage_to_rank_map[self.stage+1]
+
+
+
         if self.comm_handler is not None:
             self.comm_handler.initialize(
                 self.receive_ranks,
@@ -336,6 +357,7 @@ class StageRuntime:
     def train(self, num_iterations):
         self.tensors = []
         self.gradients = {}
+        self.control = []
         self.tensor_shapes = self.training_tensor_shapes
         self.forward_only = False
 
@@ -386,6 +408,8 @@ class StageRuntime:
         if self.forward_only and len(self.tensors) > 0:
             self.tensors.pop(0)
         self.tensors.append({})
+        self.control.append({})
+
         if self.loader_iter is not None:
             input = next(self.loader_iter)
             if self.model_type == TRANSLATION:
@@ -445,6 +469,16 @@ class StageRuntime:
                 if input_name == "ack":
                     continue
 
+                if input_name == "control":
+                    print("Received control message")
+                    self.control[-1]["forward_receive"] = \
+                        self.comm_handler.recv(
+                            input_name,
+                            forward_minibatch_id=self.forward_minibatch_id,
+                            backward_minibatch_id=self.backward_minibatch_id,
+                            backward=False)
+                    continue
+
                 self.tensors[-1][input_name] = \
                     self.comm_handler.recv(
                         input_name,
@@ -466,6 +500,15 @@ class StageRuntime:
             if output_name == "ack":
                 continue
 
+            if output_name == "control":
+                self.comm_handler.send(
+                    output_name,
+                    self.control[-1]["forward_send"],
+                    forward_minibatch_id=self.forward_minibatch_id,
+                    backward_minibatch_id=self.backward_minibatch_id,
+                    backward=False)  
+                continue
+
             self.comm_handler.send(
                 output_name,
                 self.tensors[-1][output_name],
@@ -481,24 +524,42 @@ class StageRuntime:
         # Receive all required gradients from downstream
         # machines.
         for output_name in self.send_ranks:
-             if output_name in self.target_tensor_names or "input" in output_name:
+            if output_name in self.target_tensor_names or "input" in output_name:
                 continue
 
-             self.gradients[output_name] = \
+            if output_name == "control":
+                    print("Received backward control message")
+                    self.control[-1]["backward_receive"] = \
+                        self.comm_handler.recv(
+                            output_name,
+                            forward_minibatch_id=self.forward_minibatch_id,
+                            backward_minibatch_id=self.backward_minibatch_id,
+                            backward=True)
+                    continue
+
+            self.gradients[output_name] = \
                 self.comm_handler.recv(
                     output_name,
                     forward_minibatch_id=self.forward_minibatch_id,
                     backward_minibatch_id=self.backward_minibatch_id,
                     backward=True)
 
-             self.backward_stats.stats['receive_tensors_size'] += \
-                 (self.gradients[output_name].element_size() *
-                  self.gradients[output_name].nelement())
+            self.backward_stats.stats['receive_tensors_size'] += \
+                (self.gradients[output_name].element_size() * self.gradients[output_name].nelement())
 
     def send_tensors_backward(self):
         # Send all required gradients upstream.
         for input_name in self.receive_ranks:
             if input_name in self.target_tensor_names or "input" in input_name:
+                continue
+
+            if input_name == "control":
+                self.comm_handler.send(
+                    input_name,
+                    self.control[-1]["backward_send"],
+                    forward_minibatch_id=self.forward_minibatch_id,
+                    backward_minibatch_id=self.backward_minibatch_id,
+                    backward=True)  
                 continue
 
             self.comm_handler.send(
