@@ -98,6 +98,9 @@ class StageRuntime:
         self.forward_minibatch_id = 0
         self.backward_minibatch_id = 0
         self.criterion_input_name = str(model[-1][1][0])
+        self.fwd_time = 1
+        self.bwd_time = 1
+
 
         tensor_tag = 1
         for (_, input_tensors, output_tensors) in model:
@@ -205,7 +208,7 @@ class StageRuntime:
 
             for i in range(len(model)-1):
                 for tensor_name in model[i][2]:
-                    print("Tensor_name: "+tensor_name)
+                    #print("Tensor_name: "+tensor_name)
                     if tensor_name in model[i+1][1]:
                         if module_to_stage_map[i] == \
                             module_to_stage_map[i+1]:
@@ -408,6 +411,8 @@ class StageRuntime:
         if self.forward_only and len(self.tensors) > 0:
             self.tensors.pop(0)
         self.tensors.append({})
+        if len(self.control) > 5:
+            self.control.pop(0)
         self.control.append({})
 
         self.control[-1]["forward_receive"]=None
@@ -472,7 +477,7 @@ class StageRuntime:
                     continue
 
                 if input_name == "control":
-                    print("Received control message")
+                    #print("Received control message")
                     self.control[-1]["forward_receive"] = \
                         self.comm_handler.recv(
                             input_name,
@@ -532,7 +537,7 @@ class StageRuntime:
                 continue
 
             if output_name == "control":
-                    print("Received backward control message")
+                    #print("Received backward control message")
                     self.control[-1]["backward_receive"] = \
                         self.comm_handler.recv(
                             output_name,
@@ -591,8 +596,9 @@ class StageRuntime:
         tensors = self.tensors[-1]
 
         #Receive forward stats from the previous worker 
-        print("forward receive")
-        print(self.control[-1]["forward_receive"])
+        
+
+
 
         # Run forward pass.
         start_time = time.time()
@@ -611,18 +617,35 @@ class StageRuntime:
                 flag += 1
 
             fwd_list[flag] = int(self.fwd_time * 1000000)
+            fwd_list[flag+1] = int(self.bwd_time * 1000000)
         else:
             fwd_list = [int(0)]*100
             fwd_list[0] = int(self.fwd_time * 1000000)
+            fwd_list[1] = int(self.bwd_time * 1000000)
+
 
 
         self.control[-1]["forward_send"]=torch.Tensor([fwd_list]).type(torch.int).cuda()
 
+        if self.is_criterion and self.forward_minibatch_id % 256 == 0:
+            print("Last stage execution time stats: ")
+            timelist = self.control[-1]["forward_send"].tolist()[0]
+            i = 0
+            while True:
+                if timelist[i] == 0:
+                    break
+                else:
+                    print("Stage "+str(int(i/2))+" fwd time: "+str(float(timelist[i])/1000000))
+                    print("      "+str(int(i/2))+" bwd time: "+str(float(timelist[i+1])/1000000))
+                    i += 2
 
-        #self.control[-1]["forward_send"]=torch.zeros([1,100],dtype=torch.int).cuda()
+            print("Repartition disabled")
 
-        print("forward send")
-        print(self.control[-1]["forward_send"])
+
+        ### Check if need repartiton (temp removed)      
+        #
+        #print("forward send")
+        #print(self.control[-1]["forward_send"])
 
         # Send tensors forward.
         self.send_tensors_forward()
@@ -702,8 +725,8 @@ class StageRuntime:
         # Receive input gradients needed for backward pass.
         self.receive_tensors_backward()
 
-        print("backward receive")
-        print(self.control[-1]["backward_receive"])
+        #print("backward receive")
+        #print(self.control[-1]["backward_receive"])
 
 
         # Backward pass through modules in reverse order.
@@ -759,10 +782,12 @@ class StageRuntime:
         if "loss" in outputs:
             outputs["loss"] *= self.loss_scale
 
+        bwd_start_time = time.time()
         # Perform backward pass.
         torch.autograd.backward(tuple([outputs[output_name] for output_name in outputs]),
                                 grad_tensors=tuple([output_gradients[output_name]
                                                     for output_name in outputs]))
+        self.bwd_time = time.time()-bwd_start_time
 
         if self.model_type == TRANSFORMER:
             self._rescale(tensors["ntokens"].size(0))
@@ -778,8 +803,10 @@ class StageRuntime:
 
 
         self.control[-1]["backward_send"]=torch.zeros([1,100],dtype=torch.int).cuda()
-        print("backward send")
-        print(self.control[-1]["backward_send"])
+        #print("backward send")
+        #print(self.control[-1]["backward_send"])
+
+
         # Send output gradients.
         self.send_tensors_backward()
         if self.verbose_freq > 0 and self.backward_minibatch_id % self.verbose_freq == 0:

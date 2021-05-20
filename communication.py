@@ -94,13 +94,13 @@ class CommunicationHandler(object):
         Initialize state needed for CommunicationHandler.
         """
         self.receive_ranks = receive_ranks
-        print("Receive ranks"+str(receive_ranks))
+        #print("Receive ranks"+str(receive_ranks))
         self.send_ranks = send_ranks
-        print("Send ranks"+str(send_ranks))
+        #print("Send ranks"+str(send_ranks))
         self.tensor_tags = tensor_tags
-        print("Tensor tags"+str(tensor_tags))
+        #print("Tensor tags"+str(tensor_tags))
         self.target_tensor_names = target_tensor_names
-        print("Target tensor names"+str(target_tensor_names))
+        #print("Target tensor names"+str(target_tensor_names))
         self.training_tensor_dtypes = training_tensor_dtypes
         self.rank_in_stage = rank_in_stage
         self.num_ranks_in_stage = num_ranks_in_stage
@@ -189,8 +189,8 @@ class CommunicationHandler(object):
                         threadsafe_queue.Queue())
                     self.num_forward_threads += 1
 
-        print ("Send ranks: ", self.send_ranks)
-        print ("Receive ranks: ", self.receive_ranks)
+        #print ("Send ranks: ", self.send_ranks)
+        #print ("Receive ranks: ", self.receive_ranks)
 
         # Queues for ack for forward pass-only runs as a clocking mechanism.
         self.num_ack_threads = 0
