@@ -603,7 +603,7 @@ class StageRuntime:
         
         fwd_list = None
         if self.control[-1]["forward_receive"] is not None:
-            fwd_list = self.control[-1]["forward_receive"].tolist()
+            fwd_list = self.control[-1]["forward_receive"].tolist()[-1]
             flag = 0
             while True:
                 if fwd_list[flag]==0:
@@ -616,11 +616,13 @@ class StageRuntime:
             fwd_list[0] = int(self.fwd_time * 1000000)
 
 
-        self.control[-1]["forward_send"]=torch.Tensor(fwd_list, dtype=torch.int).cuda()
+        self.control[-1]["forward_send"]=torch.Tensor([fwd_list]).type(torch.int).cuda()
 
-        
-        #print("forward send")
-        #print(self.control[-1]["forward_send"])
+
+        #self.control[-1]["forward_send"]=torch.zeros([1,100],dtype=torch.int).cuda()
+
+        print("forward send")
+        print(self.control[-1]["forward_send"])
 
         # Send tensors forward.
         self.send_tensors_forward()
