@@ -234,7 +234,7 @@ def main():
     training_tensor_shapes = {"input0": [1, 696], "input1": [1, 696], "input2": [1, 1, 696, 696],
                               "target": [1, 696], "mask": [1, 696], "control":[1, 100]}
     dtypes = {"input0": torch.int64, "input1": torch.int64,
-              "input2": torch.float32, "target": torch.int64, "mask": torch.float32, "control":torch.int64}
+              "input2": torch.float32, "target": torch.int64, "mask": torch.float32, "control":torch.int}
     inputs_module_destinations = {"input0": 0, "input1": 0, "input2": 0}
     target_tensor_names = {"target": torch.int64, "mask":torch.float32}
     for module_id, (stage, inputs, outputs) in enumerate(model[:-1]):  # Skip last layer (loss).

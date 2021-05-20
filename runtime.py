@@ -410,6 +410,8 @@ class StageRuntime:
         self.tensors.append({})
         self.control.append({})
 
+        self.control[-1]["forward_receive"]=None
+
         if self.loader_iter is not None:
             input = next(self.loader_iter)
             if self.model_type == TRANSLATION:
@@ -523,6 +525,8 @@ class StageRuntime:
     def receive_tensors_backward(self):
         # Receive all required gradients from downstream
         # machines.
+        self.control[-1]["backward_receive"]=None
+
         for output_name in self.send_ranks:
             if output_name in self.target_tensor_names or "input" in output_name:
                 continue
@@ -586,8 +590,37 @@ class StageRuntime:
         self.receive_tensors_forward()
         tensors = self.tensors[-1]
 
+        #Receive forward stats from the previous worker 
+        print("forward receive")
+        print(self.control[-1]["forward_receive"])
+
         # Run forward pass.
+        start_time = time.time()
         self._run_forward(tensors)
+        self.fwd_time = time.time()-start_time
+
+        # Set control message
+        
+        fwd_list = None
+        if self.control[-1]["forward_receive"] is not None:
+            fwd_list = self.control[-1]["forward_receive"].tolist()
+            flag = 0
+            while True:
+                if fwd_list[flag]==0:
+                    break
+                flag += 1
+
+            fwd_list[flag] = int(self.fwd_time * 1000000)
+        else:
+            fwd_list = [int(0)]*100
+            fwd_list[0] = int(self.fwd_time * 1000000)
+
+
+        self.control[-1]["forward_send"]=torch.Tensor(fwd_list, dtype=torch.int).cuda()
+
+        
+        #print("forward send")
+        #print(self.control[-1]["forward_send"])
 
         # Send tensors forward.
         self.send_tensors_forward()
@@ -618,6 +651,10 @@ class StageRuntime:
                     output.append(tensors["target"])
                     module_outputs = [module(*output)]
                 elif self.model_type == CPM:
+
+                    # with torch.autograd.profiler.profile(use_cuda=True) as prof:
+                    #     module(tensors[input_names[0]], tensors["target"], tensors["mask"])
+                    # print(prof)
                     module_outputs = [module(tensors[input_names[0]],
                                              tensors["target"],
                                              tensors["mask"])]
@@ -662,6 +699,11 @@ class StageRuntime:
         #             module.pre_backward()
         # Receive input gradients needed for backward pass.
         self.receive_tensors_backward()
+
+        print("backward receive")
+        print(self.control[-1]["backward_receive"])
+
+
         # Backward pass through modules in reverse order.
         inputs = {}
         outputs = {}
@@ -732,6 +774,10 @@ class StageRuntime:
             if "input" not in input_name:
                 self.gradients[input_name] = input_gradients[input_name]
 
+
+        self.control[-1]["backward_send"]=torch.zeros([1,100],dtype=torch.int).cuda()
+        print("backward send")
+        print(self.control[-1]["backward_send"])
         # Send output gradients.
         self.send_tensors_backward()
         if self.verbose_freq > 0 and self.backward_minibatch_id % self.verbose_freq == 0:
