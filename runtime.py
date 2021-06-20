@@ -250,10 +250,10 @@ class StageRuntime:
             for stage in range(self.num_stages):
                 ranks = stage_to_rank_map[stage]
                 if len(ranks) > 1:
-                    if self.backend == "nccl":
+                    if self.distributed_backend == "nccl":
                         groups.append(dist.new_group(ranks=ranks, backend="nccl"))
                         print("Hybrid (Data Parallel + Pipeline Parallel) with NCCL is currently not available. We choose DP using NCCL and PP uses GLOO as an currrent alternative.")
-                    else self.backend == "gloo":
+                    else:
                         groups.append(dist.new_group(ranks=ranks))
                 else:
                     groups.append(None)

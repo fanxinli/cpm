@@ -40,6 +40,7 @@ Note that, in dp_conf.json, the rank mapping is per GPU rank. And the node rank 
 <!-- python3 -m launch --nnodes 1 --node_rank 0 --nproc_per_node 4 main_with_runtime.py --data_dir data --master_addr localhost --module medium_4 --checkpoint_dir output --partition medium_4/vpipe.json --sync_mode asp --distributed_backend gloo -b 2 --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 100 --verbose 0 --num_ranks_in_server 4 --config_path medium_4/mp_conf.json -->
 
 
+python3 -m launch --nnodes 1 --node_rank 0 --nproc_per_node 4 main_with_runtime.py --data_dir data --master_addr localhost --module medium_dp --checkpoint_dir output --partition medium_dp/gpipe_dp.json --sync_mode asp --distributed_backend nccl -b 1 --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 100 --verbose 0 --num_ranks_in_server 4 --config_path medium_dp/dp_conf.json
 
 python test.py --master_addr localhost --rank 0 --intra_server_broadcast --backend nccl --use_helper_threads --send
 

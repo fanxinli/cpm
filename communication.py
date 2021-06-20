@@ -30,7 +30,7 @@ class CommunicationHandler(object):
         """
         self.rank = rank
         self.local_rank = local_rank
-        self.backend = backend
+        self.backend = GLOO  # must be gloo now
         self.num_ranks_in_server = num_ranks_in_server
         self.world_size = world_size
         self.fp16 = fp16
@@ -39,10 +39,10 @@ class CommunicationHandler(object):
         # Initialize the distributed environment.
         os.environ['MASTER_ADDR'] = master_addr
         os.environ['MASTER_PORT'] = str(master_port)
-        dist.init_process_group(backend, rank=rank, world_size=world_size)
+        dist.init_process_group(GLOO, rank=rank, world_size=world_size)
         assert dist.get_world_size() == self.world_size
         print("Finished initializing process group; backend: %s, rank: %d, "
-              "world_size: %d" % (backend, rank, world_size))
+              "world_size: %d" % (GLOO, rank, world_size))
 
         # Stores list of ranks of GPUs on the same server.
         self.ranks_in_server = []
