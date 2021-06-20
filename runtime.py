@@ -252,7 +252,7 @@ class StageRuntime:
                 if len(ranks) > 1:
                     if self.distributed_backend == "nccl":
                         groups.append(dist.new_group(ranks=ranks, backend="nccl"))
-                        print("Hybrid (Data Parallel + Pipeline Parallel) with NCCL is currently not available. We choose DP using NCCL and PP uses GLOO as an currrent alternative.")
+                        print("Hybrid (Data Parallel + Pipeline Parallel) with NCCL is currently not available. We choose DP using NCCL and PP using GLOO as an alternative.")
                     else:
                         groups.append(dist.new_group(ranks=ranks))
                 else:
