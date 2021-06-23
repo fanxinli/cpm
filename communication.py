@@ -234,14 +234,14 @@ class CommunicationHandler(object):
         backward_num_iterations = num_iterations
 
         if self.num_ranks_in_next_stage > 0:
-            assert forward_num_iterations % self.num_ranks_in_next_stage == 0
+            #assert forward_num_iterations % self.num_ranks_in_next_stage == 0
             forward_num_iterations = forward_num_iterations // \
                 self.num_ranks_in_next_stage
         else:
             forward_num_iterations = 0
 
         if self.num_ranks_in_previous_stage > 0:
-            assert backward_num_iterations % self.num_ranks_in_previous_stage == 0
+            #assert backward_num_iterations % self.num_ranks_in_previous_stage == 0
             backward_num_iterations = backward_num_iterations // \
                 self.num_ranks_in_previous_stage
         else:
