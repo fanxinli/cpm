@@ -45,3 +45,112 @@ python3 -m launch --nnodes 1 --node_rank 0 --nproc_per_node 4 main_with_runtime.
 python test.py --master_addr localhost --rank 0 --intra_server_broadcast --backend nccl --use_helper_threads --send
 
 python test.py --master_addr localhost --rank 1 --intra_server_broadcast --backend nccl --use_helper_threads
+
+## scp data
+host 0
+ scp -i "../shixiong.pem" -r data ubuntu@ec2-34-215-233-18.us-west-2.compute.amazonaws.com:/home/ubuntu
+
+host 1
+  scp -i "../shixiong.pem" -r data ubuntu@ec2-34-213-46-50.us-west-2.compute.amazonaws.com:/home/ubuntu
+
+
+## scp cpm_baseline
+host 0
+ scp -i "cpm_github/shixiong.pem" -r cpm_baseline ubuntu@ec2-52-34-93-207.us-west-2.compute.amazonaws.com:/home/ubuntu
+
+host 1
+ scp -i "cpm_github/shixiong.pem" -r cpm_baseline ubuntu@ec2-34-213-46-50.us-west-2.compute.amazonaws.com:/home/ubuntu
+
+
+
+## host 0
+ssh -i "shixiong.pem" ubuntu@ec2-52-34-93-207.us-west-2.compute.amazonaws.com
+
+## host 1
+ssh -i "shixiong.pem" ubuntu@ec2-34-213-46-50.us-west-2.compute.amazonaws.com
+
+
+## run docker 
+
+nvidia-docker run -it -v $PWD:/workspace --net=host --ipc=host dmye/cpm:v0
+
+export NCCL_SOCKET_IFNAME=ens5
+
+
+##  4 GPU per host  1-1-2  batch size 3 
+python3 -m launch --nnodes 1 --node_rank 0 --nproc_per_node 4 main_with_runtime.py --data_dir data --master_addr localhost --module medium_dp --checkpoint_dir output --partition medium_dp/gpipe_dp.json --sync_mode asp --distributed_backend nccl -b 3 --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 4 --config_path medium_dp/dp_conf.json
+
+
+
+###  8 GPU per host  DP 2 x PP 4 batch size 6  epoch 4.55hr see 8-2-4-8.log
+python3 -m launch --nnodes 1 --node_rank 0 --nproc_per_node 8 main_with_runtime.py --data_dir data --master_addr localhost --module medium_4 --checkpoint_dir output --partition medium_4/vpipe.json --sync_mode asp --distributed_backend nccl -b 6 --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 8 --config_path medium_4/8dp_conf.json
+
+### 8 GPU per host pp8 bs 8  epoch 4.5 hr 
+python3 -m launch --nnodes 1 --node_rank 0 --nproc_per_node 8 main_with_runtime.py --data_dir data --master_addr localhost --module medium_8 --checkpoint_dir output --partition medium_8/vpipe.json --sync_mode asp --distributed_backend nccl -b 8 --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 8 --config_path medium_8/mp_conf.json
+
+
+### 2 x 8 GPU  dp 4 pp 4   11.5/4 = 2.7
+
+
+host 0
+
+python3 -m launch --nnodes 2 --node_rank 0 --nproc_per_node 8 main_with_runtime.py --data_dir data --master_addr localhost --module medium_4 --checkpoint_dir output --partition medium_4/vpipe.json --sync_mode asp --distributed_backend nccl -b 6 --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 8 --config_path medium_4/dp_conf.json
+
+
+host 1
+
+python3 -m launch --nnodes 2 --node_rank 1 --nproc_per_node 8 main_with_runtime.py --data_dir data --master_addr 172.31.7.136  --module medium_4 --checkpoint_dir output --partition medium_4/vpipe.json --sync_mode asp --distributed_backend nccl -b 6 --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 8 --config_path medium_4/dp_conf.json
+
+## 32 GPU 8dp 4 pp
+
+host 0
+python3 -m launch --nnodes 4 --node_rank 0 --nproc_per_node 8 main_with_runtime.py --data_dir data --master_addr localhost --module medium_4 --checkpoint_dir output --partition medium_4/gpipe.json --sync_mode asp --distributed_backend nccl --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 8 --config_path medium_4/32dp_conf.json -b 8
+
+host 1
+python3 -m launch --nnodes 4 --node_rank 1 --nproc_per_node 8 main_with_runtime.py --data_dir data --master_addr 172.31.7.136 --module medium_4 --checkpoint_dir output --partition medium_4/gpipe.json --sync_mode asp --distributed_backend nccl --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 8 --config_path medium_4/32dp_conf.json -b 8
+
+host 2
+
+python3 -m launch --nnodes 4 --node_rank 2 --nproc_per_node 8 main_with_runtime.py --data_dir data --master_addr 172.31.7.136 --module medium_4 --checkpoint_dir output --partition medium_4/gpipe.json --sync_mode asp --distributed_backend nccl --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 8 --config_path medium_4/32dp_conf.json -b 8
+
+host 3
+
+python3 -m launch --nnodes 4 --node_rank 3 --nproc_per_node 8 main_with_runtime.py --data_dir data --master_addr 172.31.7.136 --module medium_4 --checkpoint_dir output --partition medium_4/gpipe.json --sync_mode asp --distributed_backend nccl --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 8 --config_path medium_4/32dp_conf.json -b 8
+
+
+## DeepSpeed 
+
+DeepSpeed
+
+Commands for machine 181/185/184/183:
+
+cd cpm_baseline
+nvidia-docker run -it -v $HOME/.ssh:/home/deepspeed/.ssh -v $PWD:/cpm --net=host --ipc=host dmye/cpm:v0
+sudo mkdir -p /run/sshd; sudo /usr/sbin/sshd -p 2222
+
+Commands for machine 181:
+vim .deepspeed_env
+insert NCCL_SOCKET_IFNAME=enp216s0
+cd cpm
+bash fine_tune_chid_*_*.sh
+
+
+sudo vim +280 /usr/local/lib/python3.6/dist-packages/deepspeed/launcher/runner.py
+
+sudo vim +49 /usr/local/lib/python3.6/dist-packages/deepspeed/launcher/multinode_runner.py
+
+
+environment['PDSH_SSH_ARGS_APPEND'] = '-p2222'
+
+
+
+
+## results
+                  8 x 16      2.9 epoch hour
+16 GPU batch size 32 x 16 2.36 epoch hour 
+
+
+8 GPU batch size 32 x 8 4.44 epoch hour
+
+
+4.5hr
