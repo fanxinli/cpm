@@ -881,7 +881,7 @@ class StageRuntime:
 
         num_iterations = loader_size * self.num_ranks_in_first_stage
         num_iterations -= 1
-        assert num_iterations % self.num_ranks_in_stage == 0
+        #assert num_iterations % self.num_ranks_in_stage == 0
         num_iterations = num_iterations // self.num_ranks_in_stage
 
         return num_iterations
