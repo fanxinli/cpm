@@ -154,3 +154,19 @@ environment['PDSH_SSH_ARGS_APPEND'] = '-p2222'
 
 
 4.5hr
+
+
+### add tc 
+
+ sudo tc qdisc add dev ens5 root tbf rate 40000mbit buffer 40m latency 400ms
+
+
+### show tc 
+
+ tc qdisc show dev ens5
+
+show bandwdith
+
+ sudo apt install nload
+
+ nload
