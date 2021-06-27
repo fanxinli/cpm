@@ -10,7 +10,7 @@ def model(criterion, partition, recompute_ratio):
     module.generate_layer_blocks()
     start = 0
     inputs = []
-    outputs = [['out155']]
+    outputs = [['out203']]
     all_outputs = []
     declares = []
     calculations = []
