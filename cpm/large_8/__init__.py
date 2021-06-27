@@ -187,8 +187,7 @@ self.layer197 = GPT2ParallelSelfAttention(2560, 32, 0.1, 0.1)
 self.layer199 = FusedLayerNorm(2560, eps=1e-05, elementwise_affine=True)
 self.layer200 = GPT2ParallelMLP(2560, 0.1)
 self.layer202 = FusedLayerNorm(2560, eps=1e-05, elementwise_affine=True)
-self.layer203 = torch.nn.Linear(in_features=2560, out_features=30000,bias=True)
-'''
+self.layer203 = torch.nn.Linear(in_features=2560, out_features=30000,bias=True)'''
 
 def get_caculations():
     return '''out6 = self.layer6(out0)
