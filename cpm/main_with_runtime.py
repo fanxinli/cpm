@@ -353,15 +353,17 @@ def main():
         assert args.start_epoch > 0
         validate(val_loader, r, args.start_epoch-1)
 
-    args.tokenizer_path = 'bpe_3w_new'
-    tokenizer = GPT2Tokenizer(os.path.join(args.tokenizer_path, 'vocab.json'), os.path.join(args.tokenizer_path, 'chinese_vocab.model'))
-    data_type = 'train'
-    filename = os.path.join(args.data_dir, data_type + '.json')
-    dataset = CHIDDataset(args, filename, tokenizer)
-    sampler = RandomSampler(dataset)
-    train_loader = DataLoader(dataset, sampler=sampler,
-                              batch_size=args.batch_size, num_workers=4,
-                              pin_memory=True, collate_fn=dataset.collate)
+    train_loader = None
+    if is_first_stage():
+        args.tokenizer_path = 'bpe_3w_new'
+        tokenizer = GPT2Tokenizer(os.path.join(args.tokenizer_path, 'vocab.json'), os.path.join(args.tokenizer_path, 'chinese_vocab.model'))
+        data_type = 'train'
+        filename = os.path.join(args.data_dir, data_type + '.json')
+        dataset = CHIDDataset(args, filename, tokenizer)
+        sampler = RandomSampler(dataset)
+        train_loader = DataLoader(dataset, sampler=sampler,
+                                batch_size=args.batch_size, num_workers=4,
+                                pin_memory=True, collate_fn=dataset.collate)
 
     for epoch in range(args.start_epoch, args.epochs):
         # train or run forward pass only for one epoch
