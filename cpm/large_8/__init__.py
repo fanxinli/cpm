@@ -57,7 +57,7 @@ def replace(inputs):
 def get_declares():
     return '''self.layer6 = VocabParallelEmbedding(30000, 2560)
 self.layer7 = torch.nn.Embedding(1024, 2560)
-self.layer9 = torch.nn.Dropout(p=0.1, inplace=True=False)
+self.layer9 = torch.nn.Dropout(p=0.1, inplace=False)
 self.layer10 = FusedLayerNorm(2560, eps=1e-05, elementwise_affine=True)
 self.layer11 = GPT2ParallelSelfAttention(2560, 32, 0.1, 0.1)
 self.layer13 = FusedLayerNorm(2560, eps=1e-05, elementwise_affine=True)
