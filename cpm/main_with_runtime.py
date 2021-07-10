@@ -279,6 +279,7 @@ def main():
         configuration_maps['stage_to_rank_map'] = {
             int(k): v for (k, v) in configuration_maps['stage_to_rank_map'].items()}
         configuration_maps['stage_to_depth_map'] = json_config_file.get("stage_to_depth_map", None)
+        configuration_maps['mp_size'] = json_config_file.get("mp_size", None)
 
     r = runtime.StageRuntime(
         model=model, distributed_backend=args.distributed_backend,

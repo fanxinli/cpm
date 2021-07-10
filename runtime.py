@@ -12,6 +12,8 @@ import runtime_utilities
 
 from fp16 import FP16_Module
 
+import mpu
+
 IMAGE_CLASSIFICATION = "image_classification"
 TRANSLATION = "translation"
 SPEECH_TO_TEXT = "speech_to_text"
@@ -124,6 +126,14 @@ class StageRuntime:
         module_to_stage_map = configuration_maps['module_to_stage_map']
         stage_to_rank_map = configuration_maps['stage_to_rank_map']
         stage_to_depth_map = configuration_maps['stage_to_depth_map']
+        mp_size = configuration_maps['mp_size']
+
+        mp_rank_0 = rank // mp_size * mp_size
+        mp_rank_1 = (rank // mp_size + 1) * mp_size
+        delta = rank - mp_rank_0
+        for stage in stage_to_rank_map:
+            for i in range(len(stage_to_rank_map[stage])):
+                stage_to_rank_map[stage][i] += delta
 
         if module_to_stage_map is None:
             # If IP addresses not specified, resort to all layers on
@@ -155,8 +165,8 @@ class StageRuntime:
 
             # Now, use this mapping to determine the modules contained in
             # each stage.
-            assert 0 <= self.rank < len(rank_to_stage_map)
-            self.num_ranks = len(rank_to_stage_map)
+            assert 0 <= self.rank < len(rank_to_stage_map) * mp_size
+            self.num_ranks = len(rank_to_stage_map) * mp_size
             self.num_stages = len(stage_to_module_map)
             self.stage = rank_to_stage_map[self.rank]
             self.rank_in_stage = stage_to_rank_map[self.stage].index(self.rank)
@@ -205,10 +215,10 @@ class StageRuntime:
                 world_size=self.num_ranks,
                 fp16=self.fp16,
                 backend=self.distributed_backend)
+            mpu.initialize_model_parallel(range(mp_rank_0, mp_rank_1))
 
             for i in range(len(model)-1):
                 for tensor_name in model[i][2]:
-                    #print("Tensor_name: "+tensor_name)
                     if tensor_name in model[i+1][1]:
                         if module_to_stage_map[i] == \
                             module_to_stage_map[i+1]:
