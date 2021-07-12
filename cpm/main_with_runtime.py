@@ -306,8 +306,8 @@ def main():
             print("delete stage: ", module_id)
 
             del stage 
-            del model[module_id]
-            
+            del model[module_id][0]
+
     ## empty cache
     torch.cuda.empty_cache()
 
