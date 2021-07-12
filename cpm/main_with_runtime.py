@@ -13,6 +13,9 @@ import shutil
 import sys
 import time
 
+from multiprocessing import Process, Manager
+import mpu
+
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
@@ -217,26 +220,12 @@ class CrossEntropyWrapper(nn.Module):
         loss = torch.mean(losses)
         return loss
 
-def main():
-    global args, best_prec1
-    args = parser.parse_args()
-    args.data = args.data_dir
-    torch.cuda.set_device(args.local_rank)
-    # os.environ["CUDA_VISIBLE_DEVICES"]=f"{args.local_rank}"
-
+def get_shapes(args, training_tensor_shapes, dtypes, inputs_module_destinations):
     criterion = CrossEntropyWrapper()
-
-    # create stages of the model
     partition = json.load(open(args.partition, 'r'))
     module = importlib.import_module(args.module)
     model = module.model(criterion, partition["partition"], partition["recompute_ratio"])
 
-    training_tensor_shapes = {"input0": [1, 696], "input1": [1, 696], "input2": [1, 1, 696, 696],
-                              "target": [1, 696], "mask": [1, 696], "control":[1, 100]}
-    dtypes = {"input0": torch.int64, "input1": torch.int64,
-              "input2": torch.float32, "target": torch.int64, "mask": torch.float32, "control":torch.int}
-    inputs_module_destinations = {"input0": 0, "input1": 0, "input2": 0}
-    target_tensor_names = {"target": torch.int64, "mask":torch.float32}
     for module_id, (stage, inputs, outputs) in enumerate(model[:-1]):  # Skip last layer (loss).
         input_tensors = []
         for module_input in inputs:
@@ -260,6 +249,22 @@ def main():
             training_tensor_shapes[output] = list(output_tensor.size())
             dtypes[output] = output_tensor.dtype
 
+def main():
+    global args, best_prec1
+    args = parser.parse_args()
+    args.data = args.data_dir
+    torch.cuda.set_device(args.local_rank)
+    # os.environ["CUDA_VISIBLE_DEVICES"]=f"{args.local_rank}"
+
+    manager = Manager()
+    training_tensor_shapes = manager.dict({"input0": [1, 696], "input1": [1, 696], "input2": [1, 1, 696, 696],
+                             "target": [1, 696], "mask": [1, 696], "control":[1, 100]})
+    dtypes = manager.dict({"input0": torch.int64, "input1": torch.int64,
+             "input2": torch.float32, "target": torch.int64, "mask": torch.float32, "control":torch.int})
+    inputs_module_destinations = {"input0": 0, "input1": 0, "input2": 0}
+    target_tensor_names = {"target": torch.int64, "mask":torch.float32}
+    get_shapes(args, training_tensor_shapes, dtypes, inputs_module_destinations)
+
     eval_tensor_shapes = {}
     for key in training_tensor_shapes:
         eval_tensor_shapes[key] = tuple(
@@ -280,6 +285,26 @@ def main():
             int(k): v for (k, v) in configuration_maps['stage_to_rank_map'].items()}
         configuration_maps['stage_to_depth_map'] = json_config_file.get("stage_to_depth_map", None)
         configuration_maps['mp_size'] = json_config_file.get("mp_size", None)
+
+    mp_size = configuration_maps['mp_size']
+    world_size = sum(len(v) for v in configuration_maps['stage_to_rank_map'].values()) * mp_size
+    # Initialize the distributed environment.
+    os.environ['MASTER_ADDR'] = args.master_addr
+    os.environ['MASTER_PORT'] = str(12345)
+    GLOO = 'gloo'
+    dist.init_process_group(GLOO, rank=args.rank, world_size=world_size)
+    assert dist.get_world_size() == world_size
+    print("Finished initializing process group; backend: %s, rank: %d, "
+            "world_size: %d" % (GLOO, args.rank, world_size))
+
+    mpu.initialize_model_parallel(mp_size)
+
+    criterion = CrossEntropyWrapper()
+
+    # create stages of the model
+    partition = json.load(open(args.partition, 'r'))
+    module = importlib.import_module(args.module)
+    model = module.model(criterion, partition["partition"], partition["recompute_ratio"])
 
     r = runtime.StageRuntime(
         model=model, distributed_backend=args.distributed_backend,
