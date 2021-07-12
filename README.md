@@ -202,3 +202,20 @@ show bandwdith
  sudo apt install nload
 
  nload
+
+
+### VPipe mp 16  4 stage
+ 
+python3 -m launch --nnodes 2 --node_rank 0 --nproc_per_node 8 main_with_runtime.py --data_dir data --master_addr localhost --module large_4 --checkpoint_dir output --partition large_4/gpipe.json --s
+ync_mode asp --distributed_backend nccl --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print
+-freq 10 --verbose 0 --num_ranks_in_server 8 --config_path large_4/mp_conf.json -b 2
+
+
+python3 -m launch --nnodes 2 --node_rank 1 --nproc_per_node 8 main_with_runtime.py --data_dir data --master_addr 172.31.7.136  --module large_4 --checkpoint_dir output --partition large_4/gpipe.json --sync_mode asp --distributed_backend nccl --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 8 --config_path large_4/mp_conf.json -b 1
+
+
+# vpipe mp 16 8 stage
+python3 -m launch --nnodes 2 --node_rank 0 --nproc_per_node 8 main_with_runtime.py --data_dir data --master_addr localhost --module large_8 --checkpoint_dir output --partition large_8/gpipe.json --sync_mode asp --distributed_backend nccl --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 8 --config_path large_8/mp_conf.json -b 1
+
+
+python3 -m launch --nnodes 2 --node_rank 1 --nproc_per_node 8 main_with_runtime.py --data_dir data --master_addr 172.31.7.136  --module large_8 --checkpoint_dir output --partition large_8/gpipe.json --sync_mode asp --distributed_backend nccl --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 8 --config_path large_8/mp_conf.json -b 1

@@ -297,6 +297,27 @@ def main():
         model_type=runtime.CPM,
         enable_recompute=args.recompute)
 
+
+    #######################
+    ## delete uneccessary module after forward tensor dimension profile
+    #######################
+    for module_id, (stage, inputs, outputs) in enumerate(model[:-1]):  # Skip last layer (loss).
+        if module_id != r.stage:
+            print("delete stage: ", module_id)
+
+            del stage 
+            del model[module_id]
+            
+    ## empty cache
+    torch.cuda.empty_cache()
+
+
+
+
+
+
+
+
     # stage needed to determine if current stage is the first stage
     # num_stages needed to determine if current stage is the last stage
     # num_ranks needed to determine number of warmup_minibatches in case of pipelining
