@@ -27,13 +27,19 @@ _MODEL_PARALLEL_GROUP = None
 _DATA_PARALLEL_GROUP = None
 
 
-def initialize_model_parallel(ranks):
+def initialize_model_parallel(mp_size):
     # Build the model parallel groups.
     global _MODEL_PARALLEL_GROUP
     assert _MODEL_PARALLEL_GROUP is None, \
         'model parallel group is already initialized'
-    group = torch.distributed.new_group(ranks=ranks, backend="nccl")
-    _MODEL_PARALLEL_GROUP = group
+    world_size = torch.distributed.get_world_size()
+    rank = torch.distributed.get_rank()
+    for i in range(world_size // mp_size):
+        ranks = range(i * mp_size, (i + 1) * mp_size)
+        group = torch.distributed.new_group(ranks, backend="nccl")
+        if i == (rank // mp_size):
+            print("MP Group", list(ranks))
+            _MODEL_PARALLEL_GROUP = group
 
 
 def model_parallel_is_initialized():

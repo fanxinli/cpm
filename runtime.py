@@ -128,9 +128,9 @@ class StageRuntime:
         stage_to_depth_map = configuration_maps['stage_to_depth_map']
         mp_size = configuration_maps['mp_size']
 
-        mp_rank_0 = rank // mp_size * mp_size
-        mp_rank_1 = (rank // mp_size + 1) * mp_size
-        delta = rank - mp_rank_0
+        delta = rank - rank // mp_size * mp_size
+        import copy
+        stage_to_rank_map_copy = copy.deepcopy(stage_to_rank_map)
         for stage in stage_to_rank_map:
             for i in range(len(stage_to_rank_map[stage])):
                 stage_to_rank_map[stage][i] += delta
@@ -215,7 +215,7 @@ class StageRuntime:
                 world_size=self.num_ranks,
                 fp16=self.fp16,
                 backend=self.distributed_backend)
-            mpu.initialize_model_parallel(range(mp_rank_0, mp_rank_1))
+            mpu.initialize_model_parallel(mp_size)
 
             for i in range(len(model)-1):
                 for tensor_name in model[i][2]:
@@ -258,13 +258,18 @@ class StageRuntime:
         if stage_to_rank_map is not None:
             groups = []
             for stage in range(self.num_stages):
-                ranks = stage_to_rank_map[stage]
+                ranks = stage_to_rank_map_copy[stage]
                 if len(ranks) > 1:
-                    if self.distributed_backend == "nccl":
-                        groups.append(dist.new_group(ranks=ranks, backend="nccl"))
-                        print("Hybrid (Data Parallel + Pipeline Parallel) with NCCL is currently not available. We choose DP using NCCL and PP using GLOO as an alternative.")
-                    else:
-                        groups.append(dist.new_group(ranks=ranks))
+                    for i in range(mp_size):
+                        dp_ranks = [r + i for r in ranks]
+                        if self.distributed_backend == "nccl":
+                            group = dist.new_group(ranks=dp_ranks, backend="nccl")
+                            print("Hybrid (Data Parallel + Pipeline Parallel) with NCCL is currently not available. We choose DP using NCCL and PP using GLOO as an alternative.")
+                        else:
+                            group = dist.new_group(ranks=dp_ranks)
+                        if i == delta:
+                            print("DP Group", dp_ranks)
+                            groups.append(group)
                 else:
                     groups.append(None)
             group = groups[self.stage]
