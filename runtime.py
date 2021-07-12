@@ -12,8 +12,6 @@ import runtime_utilities
 
 from fp16 import FP16_Module
 
-import mpu
-
 IMAGE_CLASSIFICATION = "image_classification"
 TRANSLATION = "translation"
 SPEECH_TO_TEXT = "speech_to_text"
@@ -215,7 +213,6 @@ class StageRuntime:
                 world_size=self.num_ranks,
                 fp16=self.fp16,
                 backend=self.distributed_backend)
-            mpu.initialize_model_parallel(mp_size)
 
             for i in range(len(model)-1):
                 for tensor_name in model[i][2]:
