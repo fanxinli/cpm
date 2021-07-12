@@ -303,17 +303,13 @@ def main():
     #######################
     for module_id, (stage, inputs, outputs) in enumerate(model[:-1]):  # Skip last layer (loss).
         if module_id != r.stage:
-            print("delete stage: ", module_id)
+            #print("delete stage: ", module_id)
 
             del stage 
             model[module_id] = None
 
     ## empty cache
     torch.cuda.empty_cache()
-
-
-
-
 
 
 

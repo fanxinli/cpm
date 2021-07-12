@@ -64,6 +64,7 @@ def get_data_parallel_group():
 
 
 def get_model_parallel_world_size():
+    return 4
     try:
         """Return world size for the model parallel group."""
         return torch.distributed.get_world_size(group=get_model_parallel_group())
