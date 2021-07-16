@@ -192,7 +192,7 @@ class StageRuntime:
                 self.num_warmup_minibatches = stage_to_depth_map[
                     str(self.stage)]
             else:
-                self.num_warmup_minibatches = self.num_ranks - 1
+                self.num_warmup_minibatches = self.num_ranks // mp_size - 1
                 for i in range(self.stage):
                     self.num_warmup_minibatches -= len(
                         stage_to_rank_map[i])
