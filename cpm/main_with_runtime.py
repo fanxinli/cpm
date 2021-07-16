@@ -256,22 +256,6 @@ def main():
     torch.cuda.set_device(args.local_rank)
     # os.environ["CUDA_VISIBLE_DEVICES"]=f"{args.local_rank}"
 
-    manager = Manager()
-    training_tensor_shapes = manager.dict({"input0": [1, 696], "input1": [1, 696], "input2": [1, 1, 696, 696],
-                             "target": [1, 696], "mask": [1, 696], "control":[1, 100]})
-    dtypes = manager.dict({"input0": torch.int64, "input1": torch.int64,
-             "input2": torch.float32, "target": torch.int64, "mask": torch.float32, "control":torch.int})
-    inputs_module_destinations = {"input0": 0, "input1": 0, "input2": 0}
-    target_tensor_names = {"target": torch.int64, "mask":torch.float32}
-    get_shapes(args, training_tensor_shapes, dtypes, inputs_module_destinations)
-
-    eval_tensor_shapes = {}
-    for key in training_tensor_shapes:
-        eval_tensor_shapes[key] = tuple(
-            training_tensor_shapes[key])
-        training_tensor_shapes[key] = tuple(
-            training_tensor_shapes[key])
-
     configuration_maps = {
         'module_to_stage_map': None,
         'stage_to_rank_map': None,
@@ -298,6 +282,21 @@ def main():
             "world_size: %d" % (GLOO, args.rank, world_size))
 
     mpu.initialize_model_parallel(mp_size)
+
+    training_tensor_shapes = {"input0": [1, 696], "input1": [1, 696], "input2": [1, 1, 696, 696],
+                              "target": [1, 696], "mask": [1, 696], "control":[1, 100]}
+    dtypes = {"input0": torch.int64, "input1": torch.int64,
+              "input2": torch.float32, "target": torch.int64, "mask": torch.float32, "control":torch.int}
+    inputs_module_destinations = {"input0": 0, "input1": 0, "input2": 0}
+    target_tensor_names = {"target": torch.int64, "mask":torch.float32}
+    get_shapes(args, training_tensor_shapes, dtypes, inputs_module_destinations)
+
+    eval_tensor_shapes = {}
+    for key in training_tensor_shapes:
+        eval_tensor_shapes[key] = tuple(
+            training_tensor_shapes[key])
+        training_tensor_shapes[key] = tuple(
+            training_tensor_shapes[key])
 
     criterion = CrossEntropyWrapper()
 
