@@ -480,7 +480,7 @@ def train(train_loader, r, optimizer, epoch):
                     batch_time.update((time.time() - batch_start_time)/print_freq)
                     batch_start_time = time.time()
                     epoch_time = (time.time() - epoch_start_time) / 3600.0
-                    trans_time = float(n) * (time.time() - batch_start_time)/ (print_freq * 3600.0)
+                    trans_time =  (batch_time / 3600.0) * float(n)
                     full_epoch_time = (epoch_time / float(s-warmup_steps)) * float(n)
 
                     print('Stage: [{0}] Epoch: [{1}][{2}/{3}]\t'
