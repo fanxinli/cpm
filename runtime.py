@@ -617,8 +617,10 @@ class StageRuntime:
 
 
         # Run forward pass.
+        torch.cuda.synchronize()
         start_time = time.time()
         self._run_forward(tensors)
+        torch.cuda.synchronize()
         self.fwd_time = time.time()-start_time
 
         # Set control message
@@ -797,11 +799,13 @@ class StageRuntime:
         if "loss" in outputs:
             outputs["loss"] *= self.loss_scale
 
+        torch.cuda.synchronize()
         bwd_start_time = time.time()
         # Perform backward pass.
         torch.autograd.backward(tuple([outputs[output_name] for output_name in outputs]),
                                 grad_tensors=tuple([output_gradients[output_name]
                                                     for output_name in outputs]))
+        torch.cuda.synchronize()
         self.bwd_time = time.time()-bwd_start_time
 
         if self.model_type == TRANSFORMER:
