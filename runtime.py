@@ -651,7 +651,7 @@ class StageRuntime:
                 if timelist[i] == 0:
                     break
                 else:
-                    print("Stage "+str(int(i/2))+" fwd time: "+"%.3f" % str(float(timelist[i])/1000000)+" bwd time: "+"%.3f" % str(float(timelist[i+1])/1000000))
+                    print("Stage "+str(int(i/2))+" fwd time: "+"%.3f" % (float(timelist[i])/1000000)+" bwd time: "+"%.3f" % (float(timelist[i+1])/1000000))
                     i += 2
 
             ### print("Repartition disabled")
