@@ -643,7 +643,7 @@ class StageRuntime:
 
         self.control[-1]["forward_send"]=torch.Tensor([fwd_list]).type(torch.int).cuda()
 
-        if self.is_criterion and self.forward_minibatch_id % 256 == 0:
+        if self.is_criterion and self.forward_minibatch_id % 128 == 0:
             print("Last stage execution time stats: ")
             timelist = self.control[-1]["forward_send"].tolist()[0]
             i = 0
@@ -651,11 +651,10 @@ class StageRuntime:
                 if timelist[i] == 0:
                     break
                 else:
-                    print("Stage "+str(int(i/2))+" fwd time: "+str(float(timelist[i])/1000000))
-                    print("      "+str(int(i/2))+" bwd time: "+str(float(timelist[i+1])/1000000))
+                    print("Stage "+str(int(i/2))+" fwd time: "+"%.3f" % str(float(timelist[i])/1000000)+" bwd time: "+"%.3f" % str(float(timelist[i+1])/1000000))
                     i += 2
 
-            print("Repartition disabled")
+            ### print("Repartition disabled")
 
 
         ### Check if need repartiton (temp removed)      
