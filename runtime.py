@@ -56,7 +56,7 @@ class StageRuntime:
                  training_tensor_dtypes, inputs_module_destinations,
                  target_tensor_names, configuration_maps, master_addr,
                  rank, local_rank, num_ranks_in_server, verbose_freq,
-                 model_type, enable_recompute=False):
+                 model_type, enable_recompute=False, cuda_sync=False):
         # Metadata needed for forward and backward pass within this stage.
         self.tensors = []
         self.gradients = {}
@@ -82,6 +82,7 @@ class StageRuntime:
         # computed from the forward pass for the backward pass.
         self.enable_recompute = enable_recompute
 
+        self.cuda_sync = cuda_sync
         # Disable recomputation for the last stage.
         if rank == num_ranks_in_server - 1:
             self.enable_recompute = False
@@ -617,10 +618,12 @@ class StageRuntime:
 
 
         # Run forward pass.
-        torch.cuda.synchronize()
+        if self.cuda_sync:
+            torch.cuda.synchronize()
         start_time = time.time()
         self._run_forward(tensors)
-        torch.cuda.synchronize()
+        if self.cuda_sync:
+            torch.cuda.synchronize()
         self.fwd_time = time.time()-start_time
 
         # Set control message
@@ -799,13 +802,15 @@ class StageRuntime:
         if "loss" in outputs:
             outputs["loss"] *= self.loss_scale
 
-        torch.cuda.synchronize()
+        if self.cuda_sync:
+            torch.cuda.synchronize()
         bwd_start_time = time.time()
         # Perform backward pass.
         torch.autograd.backward(tuple([outputs[output_name] for output_name in outputs]),
                                 grad_tensors=tuple([output_gradients[output_name]
                                                     for output_name in outputs]))
-        torch.cuda.synchronize()
+        if self.cuda_sync:
+            torch.cuda.synchronize()
         self.bwd_time = time.time()-bwd_start_time
 
         if self.model_type == TRANSFORMER:

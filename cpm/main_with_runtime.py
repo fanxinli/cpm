@@ -99,6 +99,9 @@ parser.add_argument('-v', '--verbose_frequency', default=0, type=int, metavar='N
                     help="Log verbose information")
 parser.add_argument('--num_ranks_in_server', default=1, type=int,
                     help="number of gpus per machine")
+                    
+parser.add_argument('--cuda_sync', '-c', action='store_true',
+                    help='cuda synchronize')
 
 # Recompute tensors from forward pass, instead of saving them.
 parser.add_argument('--recompute', action='store_true',
@@ -319,7 +322,8 @@ def main():
         num_ranks_in_server=args.num_ranks_in_server,
         verbose_freq=args.verbose_frequency,
         model_type=runtime.CPM,
-        enable_recompute=args.recompute)
+        enable_recompute=args.recompute,
+        cuda_sync=args.cuda_sync)
 
 
     #######################
