@@ -480,15 +480,18 @@ def train(train_loader, r, optimizer, epoch):
                     batch_time.update((time.time() - batch_start_time)/print_freq)
                     batch_start_time = time.time()
                     epoch_time = (time.time() - epoch_start_time) / 3600.0
+                    trans_time = float(n) * (time.time() - batch_start_time)/ (print_freq * 3600.0)
                     full_epoch_time = (epoch_time / float(s-warmup_steps)) * float(n)
 
                     print('Stage: [{0}] Epoch: [{1}][{2}/{3}]\t'
                           'Time: {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                           'Epoch time [hr]: {epoch_time:.3f} ({full_epoch_time:.3f})\t'
                           'Memory: {memory:.3f} ({cached_memory:.3f})\t'
-                          'Loss: {loss.val:.4f} ({loss.avg:.4f})\t'.format(
+                          'Loss: {loss.val:.4f} ({loss.avg:.4f})\t'
+                          'Transient TP: {trans_time:.3f}'.format(
                           args.stage, epoch, s, n, batch_time=batch_time,
                           epoch_time=epoch_time, full_epoch_time=full_epoch_time,
+                          trans_time=trans_time,
                           loss=losses, # top1=top1, top5=top5,
                           memory=(float(torch.cuda.memory_allocated()) / 10**9),
                           cached_memory=(float(torch.cuda.memory_cached()) / 10**9)))
