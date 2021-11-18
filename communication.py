@@ -10,6 +10,7 @@ import sys
 import threadsafe_counter
 import threadsafe_queue
 
+import ndist
 
 NCCL='nccl'
 GLOO='gloo'
@@ -30,7 +31,7 @@ class CommunicationHandler(object):
         """
         self.rank = rank
         self.local_rank = local_rank
-        self.backend = GLOO  # must be gloo now
+        self.backend = backend  # must be gloo now
         self.num_ranks_in_server = num_ranks_in_server
         self.world_size = world_size
         self.fp16 = fp16
@@ -98,7 +99,7 @@ class CommunicationHandler(object):
         self.send_ranks = send_ranks
         #print("Send ranks"+str(send_ranks))
         self.tensor_tags = tensor_tags
-        #print("Tensor tags"+str(tensor_tags))
+        print("Tensor tags"+str(tensor_tags))
         self.target_tensor_names = target_tensor_names
         #print("Target tensor names"+str(target_tensor_names))
         self.training_tensor_dtypes = training_tensor_dtypes
@@ -422,6 +423,8 @@ class CommunicationHandler(object):
 
         # Construct identical process groups on each worker.
         local_rank_connections = 0
+
+
         for src_rank in range(len(aggregated_connection_list)):
             for connection in aggregated_connection_list[src_rank]:
                 tag = int(connection[0])
@@ -454,6 +457,8 @@ class CommunicationHandler(object):
 
                     if min_rank == self.rank or max_rank == self.rank:
                         local_rank_connections += 1
+
+        print(self.connection_list)
         assert local_rank_connections == len(self.connection_list)
 
     def setup_messaging_schedule(self):
@@ -636,7 +641,7 @@ def send_helper_thread(queue, counter, local_rank, tensor_name,
     counter.decrement()
 
 def _recv(tensor_name, src_rank, tensor_shape=None, dtype=torch.float32,
-          tensor=None, tag=None, sub_process_group=None):
+          tensor=None, tag=None, sub_process_group=None, backend=NCCL):
     """
     Receives tensor by calling PyTorch's recv() call.
 
@@ -652,9 +657,13 @@ def _recv(tensor_name, src_rank, tensor_shape=None, dtype=torch.float32,
         # Receive tensor shape.
         received_tensor_shape = torch.zeros(len(tensor_shape),
                                             dtype=torch.int)
+        if backend == NCCL:
+            received_tensor_shape = received_tensor_shape.cuda()
+
         dist.broadcast(tensor=received_tensor_shape,
                        src=src_rank,
                        group=sub_process_group)
+
         received_tensor_shape = list(map(lambda x: int(x),
                                          received_tensor_shape))
 
@@ -663,6 +672,10 @@ def _recv(tensor_name, src_rank, tensor_shape=None, dtype=torch.float32,
             tensor = torch.zeros(received_tensor_shape, dtype=torch.int8, device=torch.cuda.current_device())
         else:
             tensor = torch.zeros(received_tensor_shape, dtype=dtype, device=torch.cuda.current_device())
+        
+        if backend == NCCL:
+            tensor = tensor.cuda()
+        
         dist.broadcast(tensor=tensor,
                        src=src_rank,
                        group=sub_process_group)
@@ -688,7 +701,7 @@ def _recv(tensor_name, src_rank, tensor_shape=None, dtype=torch.float32,
         return tensor.bool()
     return tensor
 
-def _send(tensor, tensor_name, src_rank, dst_rank, tag, sub_process_group=None):
+def _send(tensor, tensor_name, src_rank, dst_rank, tag, sub_process_group=None, backend=NCCL):
     """
     Sends tensor by calling PyTorch's send() call.
 
@@ -700,14 +713,23 @@ def _send(tensor, tensor_name, src_rank, dst_rank, tag, sub_process_group=None):
 
         # Send tensor shape.
         tensor_shape = torch.tensor(tensor.shape, dtype=torch.int)
+
+
+        if backend == NCCL:
+            tensor_shape = tensor_shape.cuda()
+
         dist.broadcast(tensor=tensor_shape, src=src_rank,
                       group=sub_process_group)
 
         # Send tensor.
         if tensor.dtype == torch.bool:
             tensor = tensor.to(torch.int8)
-        contiguous_tensor = tensor.detach().clone()
-        dist.broadcast(tensor=contiguous_tensor.contiguous(),
+        
+        if backend == NCCL:
+            tensor_send = tensor
+        else:
+            tensor_send = tensor.detach().clone().contiguous()
+        dist.broadcast(tensor=tensor_send,
                        src=src_rank,
                        group=sub_process_group)
     else:
@@ -721,16 +743,3 @@ def _send(tensor, tensor_name, src_rank, dst_rank, tag, sub_process_group=None):
         # Send tensor.
         dist.send(tensor=tensor, dst=dst_rank, tag=tag)
 
-
-# def i_send(tensor, dst, tag):
-#     dist.isend(tensor=tensor, dst=dst_rank, tag=tag)
-
-
-# def i_recv(tensor, dst, tag):
-#     dist.irecv(tensor=tensor, dst=dst_rank, tag=tag)
-
-# def _send(tensor, dst, tag):
-#     dist.send(tensor=tensor, dst=dst_rank, tag=tag)
-
-# def _recv(tensor, dst, tag):
-#     dist.irecv(tensor=tensor, dst=dst_rank, tag=tag)

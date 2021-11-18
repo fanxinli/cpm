@@ -81,6 +81,11 @@ export NCCL_SOCKET_IFNAME=ens5
 python3 -m launch --nnodes 1 --node_rank 0 --nproc_per_node 4 main_with_runtime.py --data_dir data --master_addr localhost --module medium_dp --checkpoint_dir output --partition medium_dp/gpipe_dp.json --sync_mode asp --distributed_backend nccl -b 3 --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 4 --config_path medium_dp/dp_conf.json
 
 
+## 4 GPU per host  1-1-1-1 medium_4 
+python3 -m launch --nnodes 1 --node_rank 0 --nproc_per_node 4 main_with_runtime.py --data_dir data --master_addr localhost --module medium_4 --checkpoint_dir output --partition medium_4/gpipe.json --sync_mode asp --distributed_backend nccl -b 6 --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 4 --config_path medium_4/mp_conf.json
+
+
+
 
 ###  8 GPU per host  DP 2 x PP 4 batch size 6  epoch 4.55hr see 8-2-4-8.log
 python3 -m launch --nnodes 1 --node_rank 0 --nproc_per_node 8 main_with_runtime.py --data_dir data --master_addr localhost --module medium_4 --checkpoint_dir output --partition medium_4/vpipe.json --sync_mode asp --distributed_backend nccl -b 6 --lr 0.000600 --lr_policy polynomial --weight-decay 0.000000 --epochs 20 --print-freq 10 --verbose 0 --num_ranks_in_server 8 --config_path medium_4/8dp_conf.json
