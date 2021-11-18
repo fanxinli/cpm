@@ -279,7 +279,8 @@ def main():
     os.environ['MASTER_ADDR'] = args.master_addr
     os.environ['MASTER_PORT'] = str(12345)
     GLOO = 'gloo'
-    dist.init_process_group(GLOO, rank=args.rank, world_size=world_size)
+    NCCL = 'nccl'
+    dist.init_process_group(args.distributed_backend, rank=args.rank, world_size=world_size)
     assert dist.get_world_size() == world_size
     print("Finished initializing process group; backend: %s, rank: %d, "
             "world_size: %d" % (GLOO, args.rank, world_size))
@@ -402,7 +403,7 @@ def main():
 
     args.tokenizer_path = 'bpe_3w_new'
     tokenizer = GPT2Tokenizer(os.path.join(args.tokenizer_path, 'vocab.json'), os.path.join(args.tokenizer_path, 'chinese_vocab.model'))
-    data_type = 'train'
+    data_type = 'dev'
     filename = os.path.join(args.data_dir, data_type + '.json')
     dataset = CHIDDataset(args, filename, tokenizer)
     sampler = RandomSampler(dataset)
