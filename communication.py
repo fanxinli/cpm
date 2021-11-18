@@ -10,7 +10,7 @@ import sys
 import threadsafe_counter
 import threadsafe_queue
 
-import ndist
+#import ndist
 
 NCCL='nccl'
 GLOO='gloo'
@@ -95,9 +95,9 @@ class CommunicationHandler(object):
         Initialize state needed for CommunicationHandler.
         """
         self.receive_ranks = receive_ranks
-        #print("Receive ranks"+str(receive_ranks))
+        print("Receive ranks"+str(receive_ranks))
         self.send_ranks = send_ranks
-        #print("Send ranks"+str(send_ranks))
+        print("Send ranks"+str(send_ranks))
         self.tensor_tags = tensor_tags
         print("Tensor tags"+str(tensor_tags))
         self.target_tensor_names = target_tensor_names

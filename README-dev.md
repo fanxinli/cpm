@@ -74,6 +74,8 @@ ssh -i "shixiong.pem" ubuntu@ec2-34-213-46-50.us-west-2.compute.amazonaws.com
 
 nvidia-docker run -it -v $PWD:/workspace --net=host --ipc=host dmye/cpm:v0
 
+
+
 export NCCL_SOCKET_IFNAME=ens5
 
 

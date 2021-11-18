@@ -428,7 +428,7 @@ class StageRuntime:
         if self.forward_only and len(self.tensors) > 0:
             self.tensors.pop(0)
         self.tensors.append({})
-        if len(self.control) > 5:
+        if len(self.control) > 5: ## ?? 
             self.control.pop(0)
         self.control.append({})
 
@@ -489,30 +489,49 @@ class StageRuntime:
                     non_blocking=True)
         else:
             # Receive all required tensors from upstream machines.
-            for input_name in self.receive_ranks:
-                if input_name == "ack":
-                    continue
+            # for input_name in self.receive_ranks:
+            #     if input_name == "ack":
+            #         continue
 
-                if input_name == "control":
+            #     if input_name == "control":
                     #print("Received control message")
-                    self.control[-1]["forward_receive"] = \
-                        self.comm_handler.recv(
-                            input_name,
-                            forward_minibatch_id=self.forward_minibatch_id,
-                            backward_minibatch_id=self.backward_minibatch_id,
-                            backward=False)
-                    continue
+                    # self.control[-1]["forward_receive"] = \
+                    #     self.comm_handler.recv(
+                    #         input_name,
+                    #         forward_minibatch_id=self.forward_minibatch_id,
+                    #         backward_minibatch_id=self.backward_minibatch_id,
+                    #         backward=False)
+                    # continue
 
-                self.tensors[-1][input_name] = \
-                    self.comm_handler.recv(
-                        input_name,
-                        forward_minibatch_id=self.forward_minibatch_id,
-                        backward_minibatch_id=self.backward_minibatch_id,
-                        backward=False)
+            tensor_list = \
+                self.comm_handler.recv(
+                    "control",
+                    forward_minibatch_id=self.forward_minibatch_id,
+                    backward_minibatch_id=self.backward_minibatch_id,
+                    backward=False) 
+
+            for i, input_name in enumerate(self.receive_ranks):
+                if input_name == "control":
+                    self.control[-1]["forward_receive"] = tensor_list[i]  
+                    continue
+                self.tensors[-1][input_name] = tensor_list[i]
 
                 self.forward_stats.stats['receive_tensors_size'] += \
                     (self.tensors[-1][input_name].element_size() *
-                     self.tensors[-1][input_name].nelement())
+                    self.tensors[-1][input_name].nelement())
+
+                 
+
+                # self.tensors[-1][input_name] = \
+                #     self.comm_handler.recv(
+                #         input_name,
+                #         forward_minibatch_id=self.forward_minibatch_id,
+                #         backward_minibatch_id=self.backward_minibatch_id,
+                #         backward=False)
+
+                    # self.forward_stats.stats['receive_tensors_size'] += \
+                    #     (self.tensors[-1][input_name].element_size() *
+                    #     self.tensors[-1][input_name].nelement())
 
             # Used to track where to receive forward from.
             self.comm_handler.increment_messaging_index(
@@ -520,84 +539,162 @@ class StageRuntime:
 
     def send_tensors_forward(self):
         # Send all required tensors downstream.
+        # for output_name in self.send_ranks:
+        #     if output_name == "ack":
+        #         continue
+
+        #     if output_name == "control":
+
+        if len(self.send_ranks) == 0:
+            return
+
+        tensor_list = []
         for output_name in self.send_ranks:
-            if output_name == "ack":
+            if "control" in self.send_ranks:
+                tensor_list.append(self.control[-1]["forward_send"])
                 continue
-
-            if output_name == "control":
-                self.comm_handler.send(
-                    output_name,
-                    self.control[-1]["forward_send"],
-                    forward_minibatch_id=self.forward_minibatch_id,
-                    backward_minibatch_id=self.backward_minibatch_id,
-                    backward=False)  
-                continue
-
-            self.comm_handler.send(
-                output_name,
-                self.tensors[-1][output_name],
-                forward_minibatch_id=self.forward_minibatch_id,
-                backward_minibatch_id=self.backward_minibatch_id,
-                backward=False)
-
+            tensor_list.append(self.tensors[-1][output_name])
             self.forward_stats.stats['send_tensors_size'] += \
                 (self.tensors[-1][output_name].element_size() *
-                 self.tensors[-1][output_name].nelement())
+                self.tensors[-1][output_name].nelement())
+
+
+
+        self.comm_handler.send(
+            "control",
+            tensor_list,
+            forward_minibatch_id=self.forward_minibatch_id,
+            backward_minibatch_id=self.backward_minibatch_id,
+            backward=False)  
+
+                # self.comm_handler.send(
+                #     output_name,
+                #     self.control[-1]["forward_send"],
+                #     forward_minibatch_id=self.forward_minibatch_id,
+                #     backward_minibatch_id=self.backward_minibatch_id,
+                #     backward=False)  
+                # continue
+
+            # self.comm_handler.send(
+            #     output_name,
+            #     self.tensors[-1][output_name],
+            #     forward_minibatch_id=self.forward_minibatch_id,
+            #     backward_minibatch_id=self.backward_minibatch_id,
+            #     backward=False)
+
+            # self.forward_stats.stats['send_tensors_size'] += \
+            #     (self.tensors[-1][output_name].element_size() *
+            #      self.tensors[-1][output_name].nelement())
 
     def receive_tensors_backward(self):
         # Receive all required gradients from downstream
         # machines.
+
         self.control[-1]["backward_receive"]=None
+
+        if len(self.send_ranks) == 0:
+            return 
 
         for output_name in self.send_ranks:
             if output_name in self.target_tensor_names or "input" in output_name:
-                continue
-
-            if output_name == "control":
-                    #print("Received backward control message")
-                    self.control[-1]["backward_receive"] = \
-                        self.comm_handler.recv(
-                            output_name,
-                            forward_minibatch_id=self.forward_minibatch_id,
-                            backward_minibatch_id=self.backward_minibatch_id,
-                            backward=True)
-                    continue
-
-            self.gradients[output_name] = \
-                self.comm_handler.recv(
-                    output_name,
-                    forward_minibatch_id=self.forward_minibatch_id,
-                    backward_minibatch_id=self.backward_minibatch_id,
-                    backward=True)
-
-            self.backward_stats.stats['receive_tensors_size'] += \
-                (self.gradients[output_name].element_size() * self.gradients[output_name].nelement())
-
-    def send_tensors_backward(self):
-        # Send all required gradients upstream.
-        for input_name in self.receive_ranks:
-            if input_name in self.target_tensor_names or "input" in input_name:
-                continue
-
-            if input_name == "control":
-                self.comm_handler.send(
-                    input_name,
-                    self.control[-1]["backward_send"],
-                    forward_minibatch_id=self.forward_minibatch_id,
-                    backward_minibatch_id=self.backward_minibatch_id,
-                    backward=True)  
-                continue
-
-            self.comm_handler.send(
-                input_name,
-                self.gradients[input_name],
+                return
+        
+        tensor_list = \
+            self.comm_handler.recv(
+                "control",
                 forward_minibatch_id=self.forward_minibatch_id,
                 backward_minibatch_id=self.backward_minibatch_id,
                 backward=True)
 
+        for i, output_name in enumerate(self.send_ranks):
+
+            if output_name == "control":
+                self.control[-1]["backward_receive"] = tensor_list[i]
+                continue
+
+            self.gradients[output_name] = tensor_list[i]
+
+            self.backward_stats.stats['receive_tensors_size'] += \
+                (self.gradients[output_name].element_size() * self.gradients[output_name].nelement())
+
+
+        # for output_name in self.send_ranks:
+        #     if output_name in self.target_tensor_names or "input" in output_name:
+        #         continue
+
+        #     if output_name == "control":
+        #             #print("Received backward control message")
+        #             self.control[-1]["backward_receive"] = \
+        #                 self.comm_handler.recv(
+        #                     output_name,
+        #                     forward_minibatch_id=self.forward_minibatch_id,
+        #                     backward_minibatch_id=self.backward_minibatch_id,
+        #                     backward=True)
+        #             continue
+
+        #     self.gradients[output_name] = \
+        #         self.comm_handler.recv(
+        #             output_name,
+        #             forward_minibatch_id=self.forward_minibatch_id,
+        #             backward_minibatch_id=self.backward_minibatch_id,
+        #             backward=True)
+
+        #     self.backward_stats.stats['receive_tensors_size'] += \
+        #         (self.gradients[output_name].element_size() * self.gradients[output_name].nelement())
+
+    def send_tensors_backward(self):
+        # Send all required gradients upstream.
+        print("receive_ranks, ", self.receive_ranks)
+
+        if len(self.receive_ranks) == 0:
+            return 
+
+        tensor_list = []
+        for input_name in self.receive_ranks:
+            if input_name in self.target_tensor_names or "input" in input_name:
+                continue
+            
+            if input_name == "control":
+                tensor_list.append(self.control[-1]["backward_send"])
+                continue
+
+            tensor_list.append(self.gradients[input_name])
             self.backward_stats.stats['send_tensors_size'] += \
                 (self.gradients[input_name].element_size() *
                  self.gradients[input_name].nelement())
+        
+        # if "control" in self.receive_ranks:
+        #     tensor_list.append(self.control[-1]["backward_send"])
+
+
+            #if input_name == "control":
+
+        self.comm_handler.send(
+            "control",
+            tensor_list,
+            forward_minibatch_id=self.forward_minibatch_id,
+            backward_minibatch_id=self.backward_minibatch_id,
+            backward=True)  
+                
+
+                # self.comm_handler.send(
+                #     input_name,
+                #     self.control[-1]["backward_send"],
+                #     forward_minibatch_id=self.forward_minibatch_id,
+                #     backward_minibatch_id=self.backward_minibatch_id,
+                #     backward=True)  
+                # continue
+
+            # self.comm_handler.send(
+            #     input_name,
+            #     self.gradients[input_name],
+            #     forward_minibatch_id=self.forward_minibatch_id,
+            #     backward_minibatch_id=self.backward_minibatch_id,
+            #     backward=True)
+
+            # self.backward_stats.stats['send_tensors_size'] += \
+            #     (self.gradients[input_name].element_size() *
+            #      self.gradients[input_name].nelement())
 
         if self.num_ranks_in_previous_stage > 0:
             # Used to track where to send tensors in the
@@ -614,9 +711,6 @@ class StageRuntime:
 
         #Receive forward stats from the previous worker 
         
-
-
-
         # Run forward pass.
         if self.cuda_sync:
             torch.cuda.synchronize()
@@ -644,8 +738,6 @@ class StageRuntime:
             fwd_list[0] = int(self.fwd_time * 1000000)
             fwd_list[1] = int(self.bwd_time * 1000000)
 
-
-
         self.control[-1]["forward_send"]=torch.Tensor([fwd_list]).type(torch.int).cuda()
 
         if self.is_criterion and self.forward_minibatch_id % 128 == 0:
@@ -660,7 +752,6 @@ class StageRuntime:
                     i += 2
 
             ### print("Repartition disabled")
-
 
         ### Check if need repartiton (temp removed)      
         #
