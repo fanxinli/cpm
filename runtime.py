@@ -502,7 +502,7 @@ class StageRuntime:
                     #         backward_minibatch_id=self.backward_minibatch_id,
                     #         backward=False)
                     # continue
-
+            #recv_len = len(self.receive_ranks)
             tensor_list = \
                 self.comm_handler.recv(
                     "control",
@@ -511,6 +511,7 @@ class StageRuntime:
                     backward=False) 
 
             for i, input_name in enumerate(self.receive_ranks):
+                #print("rrrreive_ranks ", self.receive_ranks)
                 if input_name == "control":
                     self.control[-1]["forward_receive"] = tensor_list[i]  
                     continue
@@ -550,7 +551,8 @@ class StageRuntime:
 
         tensor_list = []
         for output_name in self.send_ranks:
-            if "control" in self.send_ranks:
+            #print(output_name)
+            if output_name == "control":
                 tensor_list.append(self.control[-1]["forward_send"])
                 continue
             tensor_list.append(self.tensors[-1][output_name])
@@ -558,7 +560,9 @@ class StageRuntime:
                 (self.tensors[-1][output_name].element_size() *
                 self.tensors[-1][output_name].nelement())
 
-
+        #print("Stage ", self.stage, " tensor_list:")
+        #for t in tensor_list:
+        #    print(t.size())
 
         self.comm_handler.send(
             "control",
@@ -593,11 +597,10 @@ class StageRuntime:
         self.control[-1]["backward_receive"]=None
 
         if len(self.send_ranks) == 0:
+            print("just return")
             return 
 
-        for output_name in self.send_ranks:
-            if output_name in self.target_tensor_names or "input" in output_name:
-                return
+
         
         tensor_list = \
             self.comm_handler.recv(
@@ -608,6 +611,11 @@ class StageRuntime:
 
         for i, output_name in enumerate(self.send_ranks):
 
+            for output_name in self.send_ranks:
+                if output_name in self.target_tensor_names or "input" in output_name:
+                    continue
+            print("output....", output_name)
+            print(tensor_list[i].size())
             if output_name == "control":
                 self.control[-1]["backward_receive"] = tensor_list[i]
                 continue
@@ -644,7 +652,7 @@ class StageRuntime:
 
     def send_tensors_backward(self):
         # Send all required gradients upstream.
-        print("receive_ranks, ", self.receive_ranks)
+        #print("receive_ranks, ", self.receive_ranks)
 
         if len(self.receive_ranks) == 0:
             return 
@@ -791,9 +799,11 @@ class StageRuntime:
                     # with torch.autograd.profiler.profile(use_cuda=True) as prof:
                     #     module(tensors[input_names[0]], tensors["target"], tensors["mask"])
                     # print(prof)
+                    # print("target size", tensors["target"].size())
                     module_outputs = [module(tensors[input_names[0]],
                                              tensors["target"],
                                              tensors["mask"])]
+                    print("losssss ", module_outputs)
                 else:
                     module_outputs = [module(tensors[input_name],
                                              tensors["target"])
@@ -801,6 +811,9 @@ class StageRuntime:
                     module_outputs = [sum(module_outputs)]
             else:
                 # If layer is non-criterion.
+                for input_name in input_names:
+                    print("Stage ", self.stage, " ", input_name)
+                    print(tensors[input_name].size())
                 module_outputs = module(*[tensors[input_name]
                                           for input_name in input_names])
                 if not isinstance(module_outputs, tuple):
@@ -897,9 +910,20 @@ class StageRuntime:
             torch.cuda.synchronize()
         bwd_start_time = time.time()
         # Perform backward pass.
+        for output_name in outputs:
+            print("name ", output_name, "stage ", self.stage)
+            if output_gradients[output_name] is not None:
+                print("gradient size", outputs[output_name].size())
+
+                
+                print("gradient size", output_gradients[output_name].size())
+                print("gradient dtype", output_gradients[output_name].dtype)
+            else:
+                print("NONE")
         torch.autograd.backward(tuple([outputs[output_name] for output_name in outputs]),
                                 grad_tensors=tuple([output_gradients[output_name]
                                                     for output_name in outputs]))
+        print("backward_finish")
         if self.cuda_sync:
             torch.cuda.synchronize()
         self.bwd_time = time.time()-bwd_start_time

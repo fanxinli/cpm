@@ -281,6 +281,8 @@ class CommunicationHandler(object):
             if input_name in self.target_tensor_names or input_name == "ack":
                 continue
 
+            if input_name != "control":
+                continue
             for i in range(len(self.receive_ranks[input_name])):
                 if not forward_only:
                     self.start_helper_thread(
@@ -300,6 +302,9 @@ class CommunicationHandler(object):
             if output_name in self.target_tensor_names or output_name == "ack":
                 continue
 
+            if output_name != "control":
+                continue
+
             for i in range(len(self.send_ranks[output_name])):
                 if not forward_only:
                     self.start_helper_thread(
@@ -315,23 +320,24 @@ class CommunicationHandler(object):
                     [output_name, i, False],
                     num_iterations_for_forward_threads)
 
-        for target_tensor_name in self.target_tensor_names:
-            if self.num_ranks_in_previous_stage > 0:
-                for i in range(len(self.receive_ranks[target_tensor_name])):
-                    self.start_helper_thread(
-                        self.recv_helper_thread_args,
-                        recv_helper_thread,
-                        [target_tensor_name, i, self.target_tensor_names[target_tensor_name],
-                         False],
-                        num_iterations_for_backward_threads)
+        # for target_tensor_name in self.target_tensor_names:
+        #     if self.num_ranks_in_previous_stage > 0:
+        #         #print("start target helper ", target)
+        #         for i in range(len(self.receive_ranks[target_tensor_name])):
+        #             self.start_helper_thread(
+        #                 self.recv_helper_thread_args,
+        #                 recv_helper_thread,
+        #                 [target_tensor_name, i, self.target_tensor_names[target_tensor_name],
+        #                  False],
+        #                 num_iterations_for_backward_threads)
 
-            if self.num_ranks_in_next_stage > 0:
-                for i in range(len(self.send_ranks[target_tensor_name])):
-                    self.start_helper_thread(
-                        self.send_helper_thread_args,
-                        send_helper_thread,
-                        [target_tensor_name, i, False],
-                        num_iterations_for_forward_threads)
+        #     if self.num_ranks_in_next_stage > 0:
+        #         for i in range(len(self.send_ranks[target_tensor_name])):
+        #             self.start_helper_thread(
+        #                 self.send_helper_thread_args,
+        #                 send_helper_thread,
+        #                 [target_tensor_name, i, False],
+        #                 num_iterations_for_forward_threads)
 
         # Start helper threads for ack for forward pass-only run as a clocking
         # mechanism.
@@ -550,11 +556,16 @@ class CommunicationHandler(object):
 
         if backward:
             queue = self.backward_receive_queues[tensor_name][index]
+            #print("self.send_ranks ", self.send_ranks)
+            rank_list = self.send_ranks
         else:
             queue = self.forward_receive_queues[tensor_name][index]
+            #print("self.receive_ranks ", self.receive_ranks)
+
+            rank_list = self.receive_ranks
         tensor_shape = self.tensor_shapes[tensor_name]
 
-        return (queue, self.counter, self.local_rank, tensor_name,
+        return (queue, rank_list, self.training_tensor_dtypes, self.counter, self.local_rank, tensor_name,
                 src_rank, tag, tensor_shape, dtype, sub_process_group,
                 num_iterations)
 
@@ -582,10 +593,12 @@ class CommunicationHandler(object):
 
         if backward:
             queue = self.backward_send_queues[tensor_name][index]
+            rank_list = self.receive_ranks
         else:
             queue = self.forward_send_queues[tensor_name][index]
+            rank_list = self.send_ranks
 
-        return (queue, self.counter, self.local_rank, tensor_name, self.rank,
+        return (queue, rank_list, self.training_tensor_dtypes, self.counter, self.local_rank, tensor_name, self.rank,
                 dst_rank, tag, sub_process_group, num_iterations)
 
     def recv(self, tensor_name, forward_minibatch_id,
@@ -598,11 +611,12 @@ class CommunicationHandler(object):
             return tensor
         else:
             index = self.get_messaging_index(sending=False)
-            tensor = self.forward_receive_queues[tensor_name][
+            tensor_list = self.forward_receive_queues[tensor_name][
                 index].remove()
-            if tensor.dtype == torch.float32:
-                tensor = tensor.requires_grad_()
-            return tensor
+            for tensor in tensor_list:
+                if tensor.dtype == torch.float32:
+                    tensor = tensor.requires_grad_()
+            return tensor_list
 
     def send(self, tensor_name, tensor, forward_minibatch_id,
              backward_minibatch_id, backward=False):
@@ -615,131 +629,136 @@ class CommunicationHandler(object):
                 len(self.send_ranks[tensor_name])
             self.forward_send_queues[tensor_name][index].add(tensor)
 
-def recv_helper_thread(queue, counter, local_rank, tensor_name,
+def recv_helper_thread(queue, rank_list, training_tensor_dtypes, counter, local_rank, tensor_name,
                        src_rank, tag, tensor_shape, dtype,
                        sub_process_group, num_iterations):
     torch.cuda.set_device(local_rank)
     # This method is to be executed from a helper daemon thread.
     for i in range(num_iterations):
         tensor = _recv(
-            tensor_name, src_rank, tensor_shape=tensor_shape,
+            tensor_name, rank_list, training_tensor_dtypes, src_rank, tensor_shape=tensor_shape,
             dtype=dtype, tag=tag,
             sub_process_group=sub_process_group)
         queue.add(tensor)
     counter.decrement()
 
-def send_helper_thread(queue, counter, local_rank, tensor_name,
+def send_helper_thread(queue, rank_list, training_tensor_dtypes, counter, local_rank, tensor_name,
                        src_rank, dst_rank, tag,
                        sub_process_group, num_iterations):
     torch.cuda.set_device(local_rank)
     # This method is to be executed from a helper daemon thread.
     for i in range(num_iterations):
         tensor = queue.remove()
-        _send(tensor, tensor_name, src_rank, dst_rank,
+        _send(tensor, rank_list, training_tensor_dtypes, tensor_name, src_rank, dst_rank,
               tag=tag,
               sub_process_group=sub_process_group)
     counter.decrement()
 
-def _recv(tensor_name, src_rank, tensor_shape=None, dtype=torch.float32,
+def _recv(tensor_name, rank_list, training_tensor_dtypes ,src_rank, tensor_shape=None, dtype=torch.float32,
           tensor=None, tag=None, sub_process_group=None, backend=NCCL):
     """
     Receives tensor by calling PyTorch's recv() call.
 
     Tensor will be copied to GPU prior to return.
     """
+    s = torch.cuda.Stream()
+
     assert tag is not None
     if tensor is None:
         assert tensor_shape is not None
         assert dtype is not None
         assert dtype != torch.float16
 
+    tensor_list = []
     if sub_process_group is not None:
         # Receive tensor shape.
-        received_tensor_shape = torch.zeros(len(tensor_shape),
+        for name in rank_list:
+            #print("len(tensor_shape) ", len(tensor_shape))
+            received_tensor_shape = torch.zeros(10,
                                             dtype=torch.int)
-        if backend == NCCL:
-            received_tensor_shape = received_tensor_shape.cuda()
+            if backend == NCCL:
+                received_tensor_shape = received_tensor_shape.cuda()
 
-        dist.broadcast(tensor=received_tensor_shape,
-                       src=src_rank,
-                       group=sub_process_group)
+            with torch.cuda.stream(s):
+                dist.broadcast(tensor=received_tensor_shape,
+                            src=src_rank,
+                            group=sub_process_group)
 
-        received_tensor_shape = list(map(lambda x: int(x),
-                                         received_tensor_shape))
+            s.synchronize()
+            received_tensor_shape = list(map(lambda x: int(x),
+                                             received_tensor_shape))
 
-        # Receive tensor.
+            received_tensor_shape = [i for i in received_tensor_shape if i != 0]
+
+            #print("received_tensorshape ", received_tensor_shape)
+            # Receive tensor.
+            if dtype == torch.bool:
+                tensor = torch.zeros(received_tensor_shape, dtype=torch.int8, device=torch.cuda.current_device())
+            else:
+                tensor = torch.zeros(received_tensor_shape, dtype=training_tensor_dtypes[name], device=torch.cuda.current_device())
+        
+            if backend == NCCL:
+                tensor = tensor.cuda()
+
+            with torch.cuda.stream(s):
+                dist.broadcast(tensor=tensor,
+                            src=src_rank,
+                            group=sub_process_group)
+            s.synchronize()
+            tensor_list.append(tensor)
+            print("received ", tensor.size(), "from ", src_rank)
+
+    for tensor in tensor_list:
+        assert tensor.is_cuda
         if dtype == torch.bool:
-            tensor = torch.zeros(received_tensor_shape, dtype=torch.int8, device=torch.cuda.current_device())
-        else:
-            tensor = torch.zeros(received_tensor_shape, dtype=dtype, device=torch.cuda.current_device())
-        
-        if backend == NCCL:
-            tensor = tensor.cuda()
-        
-        dist.broadcast(tensor=tensor,
-                       src=src_rank,
-                       group=sub_process_group)
-    else:
-        # Receive tensor shape.
-        received_tensor_shape = torch.zeros(len(tensor_shape),
-                                            dtype=torch.int)
-        dist.recv(tensor=received_tensor_shape,
-                  src=src_rank,
-                  tag=tag)
-        received_tensor_shape = list(map(lambda x: int(x),
-                                         received_tensor_shape))
+            tensor = tensor.bool()
+    return tensor_list
 
-        # Receive tensor.
-        tensor = torch.zeros(received_tensor_shape, dtype=dtype)
-        dist.recv(tensor=tensor,
-                  src=src_rank,
-                  tag=tag)
-        tensor = tensor.cuda()
-
-    assert tensor.is_cuda
-    if dtype == torch.bool:
-        return tensor.bool()
-    return tensor
-
-def _send(tensor, tensor_name, src_rank, dst_rank, tag, sub_process_group=None, backend=NCCL):
+def _send(tensor_list, rank_list, training_tensor_dtypes, tensor_name, src_rank, dst_rank, tag, sub_process_group=None, backend=NCCL):
     """
     Sends tensor by calling PyTorch's send() call.
 
     If tensor is being sent not via broadcast(), it will
     be first copied to the CPU.
     """
+    s = torch.cuda.Stream()
+
     if sub_process_group is not None:
-        assert tensor.is_cuda
+        for tensor in tensor_list:
+            assert tensor.is_cuda
+            temp = list(tensor.shape)
+            # Send tensor shape.
+            while (len(temp)<10):
+                temp.append(0)
+            
+            tensor_shape = torch.tensor(temp, dtype=torch.int)
 
-        # Send tensor shape.
-        tensor_shape = torch.tensor(tensor.shape, dtype=torch.int)
+            #print("sent tensor size why", tensor.size())
+            #print("sent tensor_shape ", tensor_shape)
 
+            if backend == NCCL:
+                tensor_shape = tensor_shape.cuda()
 
-        if backend == NCCL:
-            tensor_shape = tensor_shape.cuda()
-
-        dist.broadcast(tensor=tensor_shape, src=src_rank,
-                      group=sub_process_group)
-
-        # Send tensor.
-        if tensor.dtype == torch.bool:
-            tensor = tensor.to(torch.int8)
+            with torch.cuda.stream(s):
+                dist.broadcast(tensor=tensor_shape, src=src_rank,
+                        group=sub_process_group)
+            s.synchronize()
+            # Send tensor.
+            if tensor.dtype == torch.bool:
+                tensor = tensor.to(torch.int8)
         
-        if backend == NCCL:
-            tensor_send = tensor
-        else:
-            tensor_send = tensor.detach().clone().contiguous()
-        dist.broadcast(tensor=tensor_send,
-                       src=src_rank,
-                       group=sub_process_group)
-    else:
-        assert tensor.is_cuda
-        tensor = tensor.cpu()
+            if backend == NCCL:
+                tensor_send = tensor
+            else:
+                tensor_send = tensor.detach().clone().contiguous()
 
-        # Send tensor shape.
-        tensor_shape = torch.tensor(tensor.shape, dtype=torch.int)
-        dist.send(tensor=tensor_shape, dst=dst_rank, tag=tag)
+            with torch.cuda.stream(s):
+    
+                dist.broadcast(tensor=tensor_send,
+                            src=src_rank,
+                            group=sub_process_group)
 
-        # Send tensor.
-        dist.send(tensor=tensor, dst=dst_rank, tag=tag)
+            s.synchronize()
+            print("sent ", tensor.size(), " from ", src_rank)
+
 
